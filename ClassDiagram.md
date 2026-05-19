@@ -33,11 +33,11 @@ classDiagram
     }
 
     class 전사 {
-        +스킬발동_검휘두르기() double
+        +스킬발동() double
     }
 
     class 마법사 {
-        +스킬발동_파이어볼() double
+        +스킬발동() double
     }
 
     %% Relationships
