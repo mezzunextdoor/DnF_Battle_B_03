@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>RPG 전투 시스템</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    .page-wrap {
+      width: 420px;
+      animation: slideUp .35s cubic-bezier(.4,0,.2,1);
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    .top-badge {
+      display: flex; align-items: center; gap: 8px;
+      font-size: .78rem; font-weight: 600; color: #6366f1;
+      letter-spacing: .06em; text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .top-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: #6366f1; }
+
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.08);
+    }
+
+    h2 { font-size: 1.45rem; font-weight: 800; color: #111; margin-bottom: 4px; }
+    .desc { font-size: .85rem; color: #888; margin-bottom: 28px; }
+
+    /* ─── 폼 ─── */
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block; font-size: .78rem; font-weight: 600;
+      color: #555; margin-bottom: 6px; letter-spacing: .02em;
+    }
+    input[type="text"], input[type="number"], select {
+      width: 100%; padding: 11px 14px;
+      border: 1.5px solid #e5e7eb; border-radius: 10px;
+      font-size: .92rem; color: #111; outline: none;
+      transition: border-color .18s, box-shadow .18s;
+      background: #fafafa;
+    }
+    input:focus, select:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+      background: #fff;
+    }
+    select option { background: #fff; }
+    .err { font-size: .75rem; color: #ef4444; margin-top: 4px; display: none; }
+
+    /* ─── 직업 카드 ─── */
+    .job-grid { display: flex; gap: 10px; }
+    .job-card {
+      flex: 1; padding: 14px 8px 12px;
+      border: 2px solid #e5e7eb; border-radius: 12px;
+      background: #fafafa; cursor: pointer; text-align: center;
+      transition: border-color .18s, background .18s, transform .15s;
+      user-select: none;
+    }
+    .job-card:hover { border-color: #a5b4fc; background: #f5f3ff; transform: translateY(-1px); }
+    .job-card.selected { border-color: #6366f1; background: #eef2ff; }
+    .job-card .j-emoji { font-size: 2rem; display: block; }
+    .job-card .j-name  { font-size: .88rem; font-weight: 700; color: #111; margin-top: 6px; }
+    .job-card .j-sub   { font-size: .7rem; color: #888; margin-top: 2px; }
+
+    /* ─── 버튼 ─── */
+    .btn {
+      display: block; width: 100%; padding: 13px;
+      border: none; border-radius: 11px;
+      font-size: .95rem; font-weight: 700; cursor: pointer;
+      transition: filter .18s, transform .12s, box-shadow .18s;
+    }
+    .btn:active { transform: scale(.97); }
+
+    .btn-primary {
+      background: #6366f1; color: #fff;
+      box-shadow: 0 4px 14px rgba(99,102,241,.35);
+      margin-top: 6px;
+    }
+    .btn-primary:hover { filter: brightness(1.07); }
+
+    /* ─── 전투 화면 ─── */
+    .vs-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 22px; gap: 10px;
+    }
+    .combatant { text-align: center; flex: 1; }
+    .combatant .c-emoji { font-size: 2.8rem; display: block; }
+    .combatant .c-name  { font-size: .82rem; font-weight: 700; color: #111; margin-top: 4px; }
+    .combatant .c-sub   { font-size: .7rem; color: #888; }
+    .vs-label {
+      font-size: 1.1rem; font-weight: 900; color: #ccc;
+      flex-shrink: 0;
+    }
+
+    /* ─── HP 바 ─── */
+    .hp-block { margin-bottom: 14px; }
+    .hp-row {
+      display: flex; justify-content: space-between;
+      font-size: .75rem; font-weight: 600; color: #666;
+      margin-bottom: 5px;
+    }
+    .hp-track {
+      height: 10px; background: #f0f0f0; border-radius: 99px; overflow: hidden;
+    }
+    .hp-fill {
+      height: 100%; border-radius: 99px;
+      transition: width .5s cubic-bezier(.4,0,.2,1);
+    }
+    .hp-fill.enemy { background: linear-gradient(90deg, #f87171, #fb923c); }
+    .hp-fill.ally  { background: linear-gradient(90deg, #34d399, #60a5fa); }
+
+    /* ─── 공격 버튼 ─── */
+    .attack-btn {
+      display: block; width: 100%; padding: 15px;
+      border: none; border-radius: 12px; cursor: pointer;
+      font-size: 1rem; font-weight: 800; color: #fff;
+      background: linear-gradient(135deg, #f43f5e, #fb923c);
+      box-shadow: 0 4px 16px rgba(244,63,94,.3);
+      transition: filter .18s, transform .12s;
+      margin-bottom: 10px;
+    }
+    .attack-btn:hover  { filter: brightness(1.07); }
+    .attack-btn:active { transform: scale(.97); }
+    .attack-btn:disabled {
+      background: #e5e7eb; color: #aaa;
+      box-shadow: none; cursor: not-allowed; filter: none;
+    }
+
+    .btn-ghost {
+      background: none; border: 1.5px solid #e5e7eb;
+      color: #888; border-radius: 10px; padding: 10px;
+      font-size: .82rem; font-weight: 600; cursor: pointer;
+      width: 100%; transition: background .15s, color .15s;
+    }
+    .btn-ghost:hover { background: #f5f5f5; color: #555; }
+
+    /* ─── 전투 로그 ─── */
+    .log-wrap { margin: 16px 0; }
+    .log-label { font-size: .72rem; font-weight: 700; color: #999; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+    .log-box {
+      background: #f8f9fa; border: 1px solid #ebebeb;
+      border-radius: 12px; padding: 12px 14px;
+      height: 138px; overflow-y: auto;
+      font-size: .8rem; line-height: 1.8; color: #444;
+    }
+    .log-box p { border-bottom: 1px dotted #e8e8e8; padding-bottom: 3px; margin-bottom: 3px; }
+    .log-box p:last-child { border: none; margin: 0; padding: 0; }
+    .l-dmg     { color: #ef4444; }
+    .l-grade-S { color: #b45309; font-weight: 700; }
+    .l-grade-A { color: #15803d; font-weight: 700; }
+    .l-grade-B { color: #3730a3; }
+    .l-info    { color: #6366f1; }
+
+    /* ─── 몬스터 흔들림 ─── */
+    @keyframes shake {
+      0%,100%{transform:translateX(0)}
+      20%{transform:translateX(-6px)}
+      40%{transform:translateX(6px)}
+      60%{transform:translateX(-4px)}
+      80%{transform:translateX(4px)}
+    }
+    .shake { animation: shake .3s ease; }
+
+    /* ─── 대미지 팝업 ─── */
+    .dmg-popup {
+      position: fixed; pointer-events: none; font-weight: 900;
+      font-size: 1.6rem; animation: popFloat .85s ease forwards;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,.15));
+    }
+    @keyframes popFloat {
+      0%  { opacity:1; transform: translateY(0) scale(1); }
+      60% { opacity:1; transform: translateY(-48px) scale(1.15); }
+      100%{ opacity:0; transform: translateY(-70px) scale(.85); }
+    }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+
+    hr { border: none; border-top: 1px solid #f0f0f0; margin: 18px 0; }
+  </style>
+</head>
+<body>
+
+<!-- ════ 화면 1: 캐릭터 생성 ════ -->
+<div id="screen-create" class="screen active">
+  <div class="page-wrap">
+    <div class="top-badge"><span class="dot"></span>Step 1 · 캐릭터 생성</div>
+    <div class="card">
+      <h2>내 영웅을 만들어요 🛡️</h2>
+      <p class="desc">정보를 입력하고 모험을 시작하세요</p>
+
+      <div class="field">
+        <label>플레이어 ID</label>
+        <input id="inp-id" type="text" placeholder="" />
+        <div class="err" id="err-id">권한이 없습니다 (id 불일치)</div>
+      </div>
+
+      <div class="field">
+        <label>캐릭터 이름</label>
+        <input id="inp-name" type="text" placeholder="이름을 입력하세요" />
+        <div class="err" id="err-name">이름을 입력해 주세요</div>
+      </div>
+
+      <div class="field">
+        <label>직업 선택</label>
+        <div class="job-grid">
+          <div class="job-card selected" data-job="전사" onclick="selectJob(this)">
+            <span class="j-emoji">⚔️</span>
+            <div class="j-name">전사</div>
+            <div class="j-sub">HP↑ · 물리공격</div>
+          </div>
+          <div class="job-card" data-job="마법사" onclick="selectJob(this)">
+            <span class="j-emoji">🔮</span>
+            <div class="j-name">마법사</div>
+            <div class="j-sub">공격력↑ · 마법공격</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>레벨 (1 ~ 50)</label>
+        <input id="inp-level" type="number" min="1" max="50" value="1" />
+      </div>
+
+      <button class="btn btn-primary" onclick="createCharacter()">캐릭터 생성하기 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ 화면 2: 몬스터 공격 ════ -->
+<div id="screen-battle" class="screen">
+  <div class="page-wrap">
+    <div class="top-badge"><span class="dot"></span>Step 2 · 몬스터 전투</div>
+    <div class="card">
+      <h2>전투 시작! ⚔️</h2>
+      <p class="desc" id="battle-subtitle"></p>
+
+      <!-- VS 헤더 -->
+      <div class="vs-header">
+        <div class="combatant">
+          <span class="c-emoji" id="char-emoji">⚔️</span>
+          <div class="c-name" id="char-display-name"></div>
+          <div class="c-sub" id="char-display-sub"></div>
+        </div>
+        <div class="vs-label">VS</div>
+        <div class="combatant">
+          <span class="c-emoji" id="monster-emoji">🐉</span>
+          <div class="c-name">드래곤</div>
+          <div class="c-sub">보스 몬스터</div>
+        </div>
+      </div>
+
+      <hr>
+
+      <!-- HP 바 -->
+      <div class="hp-block">
+        <div class="hp-row">
+          <span>🐉 드래곤 HP</span>
+          <span id="monster-hp-text">200 / 200</span>
+        </div>
+        <div class="hp-track">
+          <div class="hp-fill enemy" id="monster-hp-bar" style="width:100%"></div>
+        </div>
+      </div>
+      <div class="hp-block">
+        <div class="hp-row">
+          <span id="char-hp-label">내 HP</span>
+          <span id="char-hp-text"></span>
+        </div>
+        <div class="hp-track">
+          <div class="hp-fill ally" id="char-hp-bar" style="width:100%"></div>
+        </div>
+      </div>
+
+      <!-- 전투 로그 -->
+      <div class="log-wrap">
+        <div class="log-label">전투 기록</div>
+        <div class="log-box" id="log-box">
+          <p class="l-info">⚡ 전투가 시작됐습니다. 공격 버튼을 눌러보세요!</p>
+        </div>
+      </div>
+
+      <button class="attack-btn" id="btn-attack" onclick="doAttack()">⚔️ 몬스터 공격하기!</button>
+      <button class="btn-ghost" onclick="resetGame()">↩ 처음으로 돌아가기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  플레이어 클래스
+// ══════════════════════════════════════════
+class 플레이어 {
+  플레이어체크(플레이어id) {
+    return 플레이어id === "hero";
+  }
+}
+
+// ══════════════════════════════════════════
+//  캐릭터 추상 클래스
+// ══════════════════════════════════════════
+class 캐릭터 {
+  constructor(캐릭터명, 레벨) {
+    this.캐릭터명 = 캐릭터명;
+    this.레벨     = 레벨;
+    this.hp      = 0;
+    this.공격력   = 0;
+  }
+  스킬발동() {
+    throw new Error("추상 메서드: 반드시 오버라이드 필요");
+  }
+}
+
+// ══════════════════════════════════════════
+//  전사 클래스 (캐릭터 상속)
+// ══════════════════════════════════════════
+class 전사 extends 캐릭터 {
+  constructor(캐릭터명, 레벨) {
+    super(캐릭터명, 레벨);
+    this.hp    = 레벨 * 100;
+    this.maxHp = this.hp;
+    this.공격력 = 레벨 * 15;
+  }
+  스킬발동() {
+    return this.스킬발동_검휘두르기();
+  }
+  스킬발동_검휘두르기() {
+    return this.공격력 * 1.5;
+  }
+}
+
+// ══════════════════════════════════════════
+//  마법사 클래스 (캐릭터 상속)
+// ══════════════════════════════════════════
+class 마법사 extends 캐릭터 {
+  constructor(캐릭터명, 레벨) {
+    super(캐릭터명, 레벨);
+    this.hp    = 레벨 * 60;
+    this.maxHp = this.hp;
+    this.공격력 = 레벨 * 25;
+  }
+  스킬발동() {
+    return this.스킬발동_파이어볼();
+  }
+  스킬발동_파이어볼() {
+    return this.공격력 * 2.0;
+  }
+}
+
+// ══════════════════════════════════════════
+//  전투 클래스
+// ══════════════════════════════════════════
+class 전투 {
+  constructor() {
+    this.생성된캐릭터 = null;          // Java의 static 캐릭터 생성된캐릭터
+    this.player      = new 플레이어(); // Java의 private 플레이어 player
+    this.몬스터 = { 이름: "드래곤", 이모지: "🐉", hp: 200, maxHp: 200 };
+  }
+
+  // ── 캐릭터 생성 (플레이어체크 → 직업분기 → 캐릭터생성) ──
+  캐릭터생성(플레이어id, 캐릭터명, 직업, 레벨) {
+    if (!this.player.플레이어체크(플레이어id)) {
+      this.생성된캐릭터 = null;
+      return { 성공: false, 메시지: "권한이 없습니다 (id 불일치)" };
+    }
+    if (직업 === "전사") {
+      this.생성된캐릭터 = new 전사(캐릭터명, 레벨);
+    } else if (직업 === "마법사") {
+      this.생성된캐릭터 = new 마법사(캐릭터명, 레벨);
+    } else {
+      this.생성된캐릭터 = null;
+      return { 성공: false, 메시지: "알 수 없는 직업: " + 직업 };
+    }
+    return { 성공: true, 메시지: "캐릭터 생성 성공" };
+  }
+
+  // ── 몬스터 공격 (플레이어체크 → 스킬발동 → 등급판정) ──
+  몬스터공격(플레이어id) {
+    if (!this.player.플레이어체크(플레이어id)) {
+      return { 성공: false, 메시지: "권한이 없습니다 (id 불일치)" };
+    }
+    if (!this.생성된캐릭터) {
+      return { 성공: false, 메시지: "캐릭터가 없습니다." };
+    }
+    const 멘트  = this.생성된캐릭터 instanceof 전사 ? "검 휘두르기!" : "파이어볼!";
+    const 데미지 = this.생성된캐릭터.스킬발동();
+    const 등급  = this.등급판정(데미지);
+
+    this.몬스터.hp = Math.max(0, this.몬스터.hp - 데미지);
+    const 처치 = this.몬스터.hp <= 0;
+
+    return { 성공: true, 멘트, 데미지, 등급, 처치 };
+  }
+
+  // ── 등급 판정 ──
+  등급판정(데미지) {
+    if      (데미지 >= 200) return "S급 공격";
+    else if (데미지 >= 100) return "A급 공격";
+    else                   return "B급 공격";
+  }
+}
+
+// ══════════════════════════════════════════
+//  UI 로직
+// ══════════════════════════════════════════
+const battle = new 전투();
+let selectedJob = "전사";
+
+function selectJob(card) {
+  document.querySelectorAll(".job-card").forEach(c => c.classList.remove("selected"));
+  card.classList.add("selected");
+  selectedJob = card.dataset.job;
+}
+
+function createCharacter() {
+  const id   = document.getElementById("inp-id").value.trim();
+  const 이름  = document.getElementById("inp-name").value.trim();
+  const 레벨  = Math.min(50, Math.max(1, parseInt(document.getElementById("inp-level").value) || 1));
+
+  document.getElementById("err-id").style.display   = "none";
+  document.getElementById("err-name").style.display = "none";
+
+  if (!이름) {
+    document.getElementById("err-name").style.display = "block";
+    return;
+  }
+
+  const result = battle.캐릭터생성(id, 이름, selectedJob, 레벨);
+
+  if (!result.성공) {
+    document.getElementById("err-id").style.display = "block";
+    return;
+  }
+
+  initBattle();
+  document.getElementById("screen-create").classList.remove("active");
+  document.getElementById("screen-battle").classList.add("active");
+}
+
+function initBattle() {
+  const c = battle.생성된캐릭터;
+  const m = battle.몬스터;
+
+  m.hp = m.maxHp; // 몬스터 HP 리셋
+
+  const isWarrior = c instanceof 전사;
+  document.getElementById("battle-subtitle").textContent   = `플레이어 ID: hero`;
+  document.getElementById("char-emoji").textContent        = isWarrior ? "⚔️" : "🔮";
+  document.getElementById("char-display-name").textContent = c.캐릭터명;
+  document.getElementById("char-display-sub").textContent  =
+    `${isWarrior ? "전사" : "마법사"} Lv.${c.레벨} · 공격력 ${c.공격력}`;
+  document.getElementById("char-hp-label").textContent     = `${isWarrior ? "⚔️" : "🔮"} 내 HP`;
+  document.getElementById("monster-emoji").textContent     = m.이모지;
+  document.getElementById("btn-attack").disabled           = false;
+
+  updateBars();
+  document.getElementById("log-box").innerHTML =
+    `<p class="l-info">⚡ 전투가 시작됐습니다. 공격 버튼을 눌러보세요!</p>`;
+}
+
+function updateBars() {
+  const c = battle.생성된캐릭터;
+  const m = battle.몬스터;
+  const pct = (v, max) => max > 0 ? (v / max * 100).toFixed(1) + "%" : "0%";
+
+  document.getElementById("monster-hp-bar").style.width  = pct(m.hp, m.maxHp);
+  document.getElementById("monster-hp-text").textContent = `${m.hp} / ${m.maxHp}`;
+  document.getElementById("char-hp-bar").style.width     = pct(c.hp, c.maxHp);
+  document.getElementById("char-hp-text").textContent    = `${c.hp} / ${c.maxHp}`;
+}
+
+function doAttack() {
+  const result = battle.몬스터공격("hero");
+  if (!result.성공) { alert(result.메시지); return; }
+
+  const log = document.getElementById("log-box");
+
+  // 몬스터 흔들기
+  const mEl = document.getElementById("monster-emoji");
+  mEl.classList.remove("shake");
+  void mEl.offsetWidth;
+  mEl.classList.add("shake");
+
+  // 데미지 팝업
+  showPopup(result.데미지, mEl);
+
+  // 등급별 로그 스타일
+  const gradeClass = {
+    "S급 공격": "l-grade-S",
+    "A급 공격": "l-grade-A",
+    "B급 공격": "l-grade-B"
+  }[result.등급];
+
+  let html = `<p class="${gradeClass}">
+    "${result.멘트}" → 데미지 <strong>${result.데미지}</strong> → ${result.등급}
+  </p>`;
+
+  if (result.처치) {
+    mEl.textContent = "💀";
+    html += `<p class="l-grade-S">🏆 드래곤을 처치했습니다! 승리!</p>`;
+    document.getElementById("btn-attack").disabled = true;
+  }
+
+  log.innerHTML += html;
+  log.scrollTop  = log.scrollHeight;
+  updateBars();
+}
+
+function showPopup(dmg, anchor) {
+  const el = document.createElement("div");
+  el.className   = "dmg-popup";
+  el.textContent = "-" + dmg;
+  el.style.color = "#ef4444";
+
+  const r = anchor.getBoundingClientRect();
+  el.style.left = (r.left + r.width / 2 - 24) + "px";
+  el.style.top  = (r.top - 8) + "px";
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 900);
+}
+
+function resetGame() {
+  battle.생성된캐릭터 = null;
+  document.getElementById("screen-battle").classList.remove("active");
+  document.getElementById("screen-create").classList.add("active");
+}
+</script>
+</body>
+</html>
